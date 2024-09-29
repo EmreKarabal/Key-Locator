@@ -5,11 +5,14 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <wx/joystick.h>
 #ifdef __WXMSW__
 #include <windows.h>
 #endif
 
-wxArrayString options;
+std::vector<wxJoystick*> joyList;
+wxArrayString keyLines;
+wxArrayString dxLines;
 std::string description;
 std::string hexCode;
 int modifier;
@@ -19,8 +22,11 @@ std::string dxCode;
 std::string dxModifier;
 bool isPovHat;
 
-wxStaticText* staticText;
+
 wxListBox* listBox;
+wxButton* button;
+wxJoystick* joyStick;
+bool keyMode = true;
 
 
 
@@ -87,7 +93,7 @@ std::unordered_map<int, std::string> keyMap{
     {0x4E, "Numpad +"}, {0x53, "Numpad ."}, {0x9C, "Numpad Enter"}
 };
 
-
+std::unordered_map<std::string, std::string> callbackMap;
 
 
 
@@ -118,6 +124,7 @@ void process_line(const std::string& line) {
         }
 
         description = resultVector[0];
+        callback = resultVector[1];
         hexCode = resultVector[4];
         modifier = std::stoi(resultVector[5]);
         complexModifier = resultVector[6];
@@ -145,14 +152,16 @@ void process_line(const std::string& line) {
             }
         }
 
+        // map callback & description
 
+        callbackMap.insert({ callback, description });
 
         
 
 
         std::string sortedLine = description + "   " + strModifier + "  " + strKey;
 
-        options.Add(sortedLine);
+        keyLines.Add(sortedLine);
 
         resultVector.clear();
 
@@ -186,8 +195,8 @@ void process_line(const std::string& line) {
             wxLogStatus("dxVector should have more than 3 elements!");
         }
 
-        std::string print = callback + " " + dxCode + " " + dxModifier;
-        options.Add(print);
+        std::string print = callbackMap[callback] + "  " + dxCode;
+        dxLines.Add(print);
     }
 }
 
@@ -213,9 +222,9 @@ void findLine(std::string keyStr) {
     std::string line;
     std::string remainingPart;
 
-    for (int i = 0; i < options.size(); i++) {
+    for (int i = 0; i < keyLines.size(); i++) {
 
-        line = options[i];
+        line = keyLines[i];
         remainingPart = splitKeyPart(line);
 
         remainingPart.erase(std::remove_if(remainingPart.begin(), remainingPart.end(), ::isspace), remainingPart.end());
@@ -233,6 +242,53 @@ void findLine(std::string keyStr) {
     }
 
    
+
+}
+
+void findLineDX(int buttonCode, int joyId) {
+    
+    std::vector<std::string> temp;
+    std::string line;
+
+    // Find which one is which
+    if (joyId == 0) buttonCode += 128;
+
+    for (int i = 0; i < dxLines.size(); i++) {
+        
+        line = splitKeyPart(dxLines[i].ToStdString());
+        std::stringstream ss(line);
+        std::string word;
+        temp.clear();
+        
+        while (ss >> word) {
+
+            temp.push_back(word);
+
+        }
+        
+        if (temp.size() >= 2) {
+            try {
+                int checkCode = std::stoi(temp[1]);
+                if (buttonCode == checkCode) {
+                    listBox->Select(i);
+                    wxLogStatus("%s", line);
+                    break;
+                }
+            }
+            catch (const std::exception e) {
+                wxLogError("Error during conversion: %s", e.what());
+            }
+
+        }
+        else {
+            // this gets picked for whatever reason deal with this
+            wxLogError("Invalid line format: %s", line);
+        }
+
+
+        temp.clear();
+
+    }
 
 }
 
@@ -274,47 +330,58 @@ void MainFrame::readFile(std::string filePath)
 
 
 
+
+
 bool isModifierKey(int keyCode) {
     return keyCode == WXK_SHIFT || keyCode == WXK_CONTROL || keyCode == WXK_ALT;
 }
 
 
+
+
+
+
+
 void MainFrame::OnKeyDown(wxKeyEvent& evt)
 {
-    int keyCode = evt.GetKeyCode();
+    if (keyMode) {
 
-    if (evt.ShiftDown()) shift = true;
-    if (evt.AltDown()) alt = true;
-    if (evt.ControlDown()) ctrl = true;
+        int keyCode = evt.GetKeyCode();
 
-    if (!isModifierKey(keyCode)) {
-        #ifdef __WXMSW__
-        int virtualCode = evt.GetRawKeyCode();
-        UINT scanCode = MapVirtualKey(virtualCode, MAPVK_VK_TO_VSC);
+        if (evt.ShiftDown()) shift = true;
+        if (evt.AltDown()) alt = true;
+        if (evt.ControlDown()) ctrl = true;
 
-        #endif
+        if (!isModifierKey(keyCode)) {
+            #ifdef __WXMSW__
+            int virtualCode = evt.GetRawKeyCode();
+            UINT scanCode = MapVirtualKey(virtualCode, MAPVK_VK_TO_VSC);
 
-        int count = 0;
+            #endif
 
-        if (shift) count += 1;
-        if (ctrl) count += 2;
-        if (alt) count += 4;
+            int count = 0;
 
-        std::string modifiers = modifierMap[count];
+            if (shift) count += 1;
+            if (ctrl) count += 2;
+            if (alt) count += 4;
 
-        std::string finalKey = modifiers + keyMap[scanCode];
+            std::string modifiers = modifierMap[count];
 
-        finalKey.erase(std::remove_if(finalKey.begin(), finalKey.end(), ::isspace), finalKey.end());
+            std::string finalKey = modifiers + keyMap[scanCode];
+
+            finalKey.erase(std::remove_if(finalKey.begin(), finalKey.end(), ::isspace), finalKey.end());
 
 
 
-        findLine(finalKey);
+            findLine(finalKey);
 
-        ResetModifiers();
+            ResetModifiers();
 
-    }
+        }
 
-    evt.Skip();
+        evt.Skip();
+
+   }
 
 
 }
@@ -324,31 +391,102 @@ void MainFrame::OnKeyDown(wxKeyEvent& evt)
 
 
 void MainFrame::OnKeyUp(wxKeyEvent& evt) {
+    if (keyMode) {
 
-    int keyCode = evt.GetKeyCode();
-    if (keyCode == WXK_SHIFT) shift = false;
-    if (keyCode == WXK_ALT) alt = false;
-    if (keyCode == WXK_CONTROL) ctrl = false;
+        int keyCode = evt.GetKeyCode();
+        if (keyCode == WXK_SHIFT) shift = false;
+        if (keyCode == WXK_ALT) alt = false;
+        if (keyCode == WXK_CONTROL) ctrl = false;
 
-    evt.Skip();
+        evt.Skip();
+
+
+    }
+    
+
+}
+
+
+void MainFrame::OnButtonClicked(wxCommandEvent& evt)
+{
+    if (keyMode) {
+        keyMode = false;
+    }
+    else {
+        keyMode = true;
+    }
+
+    wxLogStatus("");
+
+    if (listBox->GetString(0) == keyLines[0]) {
+        wxLogMessage("Switched to Controller Mode");
+        listBox->Clear();
+        listBox->Append(dxLines);
+    }
+    else if (listBox->GetString(0) == dxLines[0]) {
+        wxLogMessage("Switched to Keyboard Mode");
+        listBox->Clear();
+        listBox->Append(keyLines);
+    }
+    listBox->SetFocus();
+}
+
+void MainFrame::OnJoyButtonDown(wxJoystickEvent& evt)
+{
+    if (!keyMode) {
+
+        int joyId = evt.GetJoystick();
+        int buttonCode = evt.GetButtonOrdinal();
+
+        findLineDX(buttonCode, joyId);
+
+    }
 
 }
 
 
 
+
+
+
+
+
+
 MainFrame::MainFrame(const wxString& filePath,const wxString& title) : wxFrame(nullptr, wxID_ANY, title) {
+
+ 
+    
 
     readFile(filePath.ToStdString());
     CreateStatusBar();
 
     wxPanel* panel = new wxPanel(this);
+    button = new wxButton(panel, wxID_ANY, "Switch Mode", wxPoint(580, 80), wxSize(200, 40));
+    listBox = new wxListBox(panel, wxID_ANY, wxPoint(50, 50), wxSize(500, 300), keyLines, wxWANTS_CHARS);
+    
+    
+    
 
-    listBox = new wxListBox(panel, wxID_ANY, wxPoint(50, 50), wxSize(500, 300), options, wxWANTS_CHARS);
 
-    staticText = new wxStaticText(panel, wxID_ANY, "", wxPoint(50, 400), wxSize(50, -1));
+    Bind(wxEVT_JOY_BUTTON_DOWN, &MainFrame::OnJoyButtonDown, this);
 
+    button->Bind(wxEVT_BUTTON, &MainFrame::OnButtonClicked, this);
     listBox->Bind(wxEVT_KEY_DOWN, &MainFrame::OnKeyDown, this);
     listBox->Bind(wxEVT_KEY_UP, &MainFrame::OnKeyUp, this);
+
+    int numberOfDevices = wxJoystick::GetNumberJoysticks();
+
+    for (int i = 0; i < numberOfDevices; ++i) {
+
+        wxJoystick* joystick = new wxJoystick(i);
+        joystick->SetCapture(this, 10);
+        joyList.push_back(joystick);
+
+    }
+
+
+    listBox->SetFocus();
+    
     ResetModifiers();
 	
 	
@@ -359,4 +497,18 @@ MainFrame::MainFrame(const wxString& filePath,const wxString& title) : wxFrame(n
 
 
 }
+
+MainFrame::~MainFrame()
+{
+
+    for (auto joystick : joyList) {
+
+        joystick->ReleaseCapture();
+        delete joystick;
+
+    }
+
+
+}
+
 
