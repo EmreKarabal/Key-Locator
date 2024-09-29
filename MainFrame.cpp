@@ -14,6 +14,11 @@ std::string description;
 std::string hexCode;
 int modifier;
 std::string complexModifier;
+std::string callback;
+std::string dxCode;
+std::string dxModifier;
+bool isPovHat;
+
 wxStaticText* staticText;
 wxListBox* listBox;
 
@@ -88,21 +93,24 @@ std::unordered_map<int, std::string> keyMap{
 
 void process_line(const std::string& line) {
 
-    std::vector<std::string> resultVector;
+    
 
-    size_t quote_start = line.find_first_of('\"');
-    size_t quote_end = line.find_last_of('\"');
+    size_t quoteStart = line.find_first_of('\"');
+    size_t quoteEnd = line.find_last_of('\"');
 
-    if (quote_start != std::string::npos && quote_end != std::string::npos && quote_start != quote_end) {
+    if (quoteStart != std::string::npos && quoteEnd != std::string::npos && quoteStart != quoteEnd) {
+
+        std::vector<std::string> resultVector;
+
         // Extract the part within the quotes
-        std::string quoted_part = line.substr(quote_start, quote_end - quote_start + 1);
-        resultVector.insert(resultVector.begin(), quoted_part);
+        std::string quotedPart = line.substr(quoteStart, quoteEnd - quoteStart + 1);
+        resultVector.insert(resultVector.begin(), quotedPart);
 
         // Get the part before the quoted text
-        std::string pre_quoted_part = line.substr(0, quote_start - 1); // Strip trailing space before quotes
+        std::string preQuotedPart = line.substr(0, quoteStart - 1); // Strip trailing space before quotes
 
         // Tokenize the pre-quoted part by spaces
-        std::stringstream ss(pre_quoted_part);
+        std::stringstream ss(preQuotedPart);
         std::string word;
         while (ss >> word) {
             // Process each word as needed
@@ -146,12 +154,40 @@ void process_line(const std::string& line) {
 
         options.Add(sortedLine);
 
-
+        resultVector.clear();
 
 
     }
     else {
-        std::cerr << "Error: No quoted part found." << std::endl;
+
+        // This block handles non quoted parts so essentialy the lines that shows for the controller assignments.
+        // I think this should be a seperate list or whatever in order to not mess with the keyListening & joyListening
+        // This part so far only displays in the list
+
+        std::vector<std::string> dxVector;
+
+        std::string dxPart = line;
+
+        std::stringstream ss(dxPart);
+        std::string word;
+
+       
+
+        while (ss >> word) {
+            dxVector.push_back(word);
+        }
+
+        if (dxVector.size() >= 3) {
+            callback = dxVector.at(0);
+            dxCode = dxVector.at(1);
+            dxModifier = dxVector.at(2);
+        }
+        else {
+            wxLogStatus("dxVector should have more than 3 elements!");
+        }
+
+        std::string print = callback + " " + dxCode + " " + dxModifier;
+        options.Add(print);
     }
 }
 
