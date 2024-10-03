@@ -195,7 +195,7 @@ void process_line(const std::string& line) {
             wxLogStatus("dxVector should have more than 3 elements!");
         }
 
-        std::string print = callbackMap[callback] + "  " + dxCode;
+        std::string print = callbackMap[callback] + "  DX" + dxCode;
         dxLines.Add(print);
     }
 }
@@ -247,48 +247,49 @@ void findLine(std::string keyStr) {
 
 void findLineDX(int buttonCode, int joyId) {
     
-    std::vector<std::string> temp;
+    wxJoystick* inputJoy;
+    wxJoystick* otherJoy;
     std::string line;
 
-    // Find which one is which
-    if (joyId == 0) buttonCode += 128;
+    // Find out which one is which
 
-    for (int i = 0; i < dxLines.size(); i++) {
+    if (joyId == 0) {
+        inputJoy = joyList[joyId];
+        otherJoy = joyList[joyId + 1];   
+    }
+    else {
+        inputJoy = joyList[joyId];
+        otherJoy = joyList[joyId - 1];
+    }
         
-        line = splitKeyPart(dxLines[i].ToStdString());
-        std::stringstream ss(line);
-        std::string word;
-        temp.clear();
-        
-        while (ss >> word) {
+    // Compare their names
+    if (inputJoy->GetProductName().compare(otherJoy->GetProductName()) < 0) {
 
-            temp.push_back(word);
-
-        }
-        
-        if (temp.size() >= 2) {
-            try {
-                int checkCode = std::stoi(temp[1]);
-                if (buttonCode == checkCode) {
-                    listBox->Select(i);
-                    wxLogStatus("%s", line);
-                    break;
-                }
-            }
-            catch (const std::exception e) {
-                wxLogError("Error during conversion: %s", e.what());
-            }
-
-        }
-        else {
-            // this gets picked for whatever reason deal with this
-            wxLogError("Invalid line format: %s", line);
-        }
-
-
-        temp.clear();
+        // Add the joystick magnitude
+        buttonCode += 128;
 
     }
+
+    //Find correct line
+    for (int i = 0; i < dxLines.size(); i++) {
+        
+        line = dxLines[i];
+        line = splitKeyPart(line);
+        line.erase(std::remove_if(line.begin(), line.end(), ::isspace), line.end());
+        std::string finalStr = line.substr(2, line.length() - 2);
+        
+        if (finalStr == std::to_string(buttonCode)) {
+
+            line = dxLines[i];
+            listBox->Select(i);
+            wxLogStatus("%s", line);
+            break;
+        }
+
+       
+
+    }
+
 
 }
 
