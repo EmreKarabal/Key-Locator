@@ -20,8 +20,9 @@ std::string complexModifier;
 std::string callback;
 std::string dxCode;
 std::string dxModifier;
+int povCode;
 bool isPovHat;
-
+int lastPosition;
 
 wxListBox* listBox;
 wxButton* button;
@@ -95,9 +96,19 @@ std::unordered_map<int, std::string> keyMap{
 
 std::unordered_map<std::string, std::string> callbackMap;
 
+std::unordered_map<int, std::string> povMap{
+    { 0, "UP"},
+    { 1, "UP RIGHT" },
+    { 2, "RIGHT" },
+    { 3, "DOWN RIGHT" },
+    { 4, "DOWN" },
+    { 5, "DOWN LEFT" },
+    { 6, "LEFT" },
+    { 7, "UP LEFT" }
+};
 
 
-void process_line(const std::string& line) {
+void processLine(const std::string& line) {
 
     
 
@@ -144,7 +155,7 @@ void process_line(const std::string& line) {
             strModifier = "Alt + C:";
         }
         else {
-            if (modifierMap[modifier] != "None") {
+            if (modifierMap[modifier] != "") {
                 strModifier = modifierMap[modifier];
             }
             else {
@@ -161,7 +172,9 @@ void process_line(const std::string& line) {
 
         std::string sortedLine = description + "   " + strModifier + "  " + strKey;
 
-        keyLines.Add(sortedLine);
+        if (keyLines.Index(sortedLine) == wxNOT_FOUND) {
+            keyLines.Add(sortedLine);
+        }
 
         resultVector.clear();
 
@@ -169,34 +182,47 @@ void process_line(const std::string& line) {
     }
     else {
 
-        // This block handles non quoted parts so essentialy the lines that shows for the controller assignments.
-        // I think this should be a seperate list or whatever in order to not mess with the keyListening & joyListening
-        // This part so far only displays in the list
+        // Handles lines with no quotes aka DXLines
 
         std::vector<std::string> dxVector;
-
-        std::string dxPart = line;
-
-        std::stringstream ss(dxPart);
+        std::stringstream ss(line);
         std::string word;
-
-       
+        std::string print;
 
         while (ss >> word) {
             dxVector.push_back(word);
         }
 
-        if (dxVector.size() >= 3) {
+        if (dxVector.size() >= 4) {
+
             callback = dxVector.at(0);
-            dxCode = dxVector.at(1);
+            dxCode = "DX" + dxVector.at(1);
             dxModifier = dxVector.at(2);
-        }
-        else {
-            wxLogStatus("dxVector should have more than 3 elements!");
+            if (dxVector.at(3) == "-3") {
+                isPovHat = true;
+                povCode = std::stoi(dxVector.at(4));
+            }
         }
 
-        std::string print = callbackMap[callback] + "  DX" + dxCode;
-        dxLines.Add(print);
+        if (isPovHat) {
+            dxCode = "POV:" + povMap[povCode];
+            print = callbackMap[callback] + "  " + dxCode;
+        }
+        else {
+            print = callbackMap[callback] + "  " + dxCode;
+
+        }
+
+
+        dxVector.clear();
+
+        if (dxLines.Index(print) == wxNOT_FOUND) {
+            dxLines.Add(print);
+        }
+
+        
+        
+        
     }
 }
 
@@ -293,6 +319,68 @@ void findLineDX(int buttonCode, int joyId) {
 
 }
 
+void findPOVDX(int povCode, int joyId) {
+    
+    std::string direction;
+
+    switch (povCode) {
+    case 0:
+        direction = "UP";
+        break;
+    case 4500:
+        direction = "UP RIGHT";
+        break;
+    case 9000:
+        direction = "RIGHT";
+        break;
+    case 13500:
+        direction = "DOWN RIGHT";
+        break;
+    case 18000:
+        direction = "DOWN";
+        break;
+    case 22500:
+        direction = "DOWN LEFT";
+        break;
+    case 27000:
+        direction = "LEFT";
+        break;
+    case 31500:
+        direction = "UP LEFT";
+        break;
+    default:
+        direction = "null";
+        break;
+    }
+
+    std::string key = "POV:" + direction;
+ 
+    
+    if (direction != "null") {
+        
+        std::string line;
+
+        for (int i = 0; i < dxLines.size(); i++) {
+
+            line = dxLines[i];
+            line = splitKeyPart(line);
+            line.erase(std::remove_if(line.begin(), line.end(), ::isspace), line.end());
+            
+            if (line == key) {
+                line = dxLines[i];
+                listBox->Select(i);
+                wxLogStatus("%s", line);
+                break;
+            }
+
+        }
+
+    }
+    
+
+
+}
+
 void MainFrame::ResetModifiers()
 {
     shift = false;
@@ -316,7 +404,7 @@ void MainFrame::readFile(std::string filePath)
         while (!file.eof()) {
 
             std::getline(file, line);
-            process_line(line);
+            processLine(line);
 
 
 
@@ -434,14 +522,42 @@ void MainFrame::OnButtonClicked(wxCommandEvent& evt)
 
 void MainFrame::OnJoyButtonDown(wxJoystickEvent& evt)
 {
+    
+
     if (!keyMode) {
+
+        
 
         int joyId = evt.GetJoystick();
         int buttonCode = evt.GetButtonOrdinal();
-
+        
         findLineDX(buttonCode, joyId);
+        
 
     }
+
+}
+
+void MainFrame::OnPOVChanged(wxJoystickEvent& evt)
+{
+    
+    if (!keyMode) {
+
+        int joyId = evt.GetJoystick();
+        int povPosition = 65535;
+        if (joyList[joyId]->HasPOV()) {
+            povPosition = joyList[joyId]->GetPOVPosition();
+        }
+
+        if (povPosition != -1 && povPosition != lastPosition && povPosition != 65535) {
+            
+            findPOVDX(povPosition, joyId);
+            lastPosition = 65535;
+        }
+
+    }
+
+
 
 }
 
@@ -453,9 +569,11 @@ void MainFrame::OnJoyButtonDown(wxJoystickEvent& evt)
 
 
 
+
+
 MainFrame::MainFrame(const wxString& filePath,const wxString& title) : wxFrame(nullptr, wxID_ANY, title) {
 
- 
+    lastPosition = 65535;
     
 
     readFile(filePath.ToStdString());
@@ -470,6 +588,8 @@ MainFrame::MainFrame(const wxString& filePath,const wxString& title) : wxFrame(n
 
 
     Bind(wxEVT_JOY_BUTTON_DOWN, &MainFrame::OnJoyButtonDown, this);
+    Bind(wxEVT_JOY_MOVE, &MainFrame::OnPOVChanged, this);
+    
 
     button->Bind(wxEVT_BUTTON, &MainFrame::OnButtonClicked, this);
     listBox->Bind(wxEVT_KEY_DOWN, &MainFrame::OnKeyDown, this);

@@ -8,7 +8,7 @@ private:
 	void OnKeyUp(wxKeyEvent& evt);
 	void OnButtonClicked(wxCommandEvent& evt);
 	void OnJoyButtonDown(wxJoystickEvent& evt);
-
+	void OnPOVChanged(wxJoystickEvent& evt);
 	void ResetModifiers();
 	void readFile(std::string filePath);
 

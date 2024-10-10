@@ -21,8 +21,8 @@ FileSelectFrame::FileSelectFrame(const wxString& title) : wxFrame(nullptr, wxID_
 
 void FileSelectFrame::OnSelectFile(wxCommandEvent& evt) {
 
-    wxFileDialog openFileDialog(this, _("Open file"), "", "",
-        "All files (*.*)|*.*", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+	wxFileDialog openFileDialog(this, _("Open .key file"), "", "",
+		"Key files (*.key)|*.key", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
 
     if (openFileDialog.ShowModal() == wxID_CANCEL)
         return; // User canceled the dialog
